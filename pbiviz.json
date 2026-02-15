@@ -1,0 +1,26 @@
+{
+  "visual": {
+    "name": "savetopdfdatatable",
+    "displayName": "Save to PDF Datatable",
+    "guid": "savetopdfdatatableA8E3B8F3C1454E0DBAA3165D2F98D2C1",
+    "visualClassName": "Visual",
+    "version": "1.0.7.0",
+    "description": "Custom table visual with pagination, load-all mode, and print-to-PDF workflow.",
+    "supportUrl": "https://buymeacoffee.com/andyocnz",
+    "gitHubUrl": "https://example.com/repo"
+  },
+  "apiVersion": "5.3.0",
+  "author": {
+    "name": "Andy OCNZ",
+    "email": "andy.ocnz@gmail.com"
+  },
+  "assets": {
+    "icon": "assets/icon.png"
+  },
+  "externalJS": null,
+  "style": "style/visual.less",
+  "capabilities": "capabilities.json",
+  "dependencies": null,
+  "stringResources": [],
+  "version": "1.0.7.0"
+}

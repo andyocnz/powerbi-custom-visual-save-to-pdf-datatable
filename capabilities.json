@@ -1,0 +1,102 @@
+{
+  "dataRoles": [
+    {
+      "name": "values",
+      "displayName": "Values",
+      "kind": "GroupingOrMeasure"
+    }
+  ],
+  "dataViewMappings": [
+    {
+      "table": {
+        "rows": {
+          "select": [
+            {
+              "for": {
+                "in": "values"
+              }
+            }
+          ],
+          "dataReductionAlgorithm": {
+            "window": {
+              "count": 30000
+            }
+          }
+        }
+      }
+    }
+  ],
+  "sorting": {
+    "default": {}
+  },
+  "objects": {
+    "paging": {
+      "displayName": "Paging",
+      "properties": {
+        "pageSize": {
+          "displayName": "Rows per page",
+          "type": {
+            "numeric": true
+          }
+        }
+      }
+    },
+    "exportSettings": {
+      "displayName": "Export",
+      "properties": {
+        "orientation": {
+          "displayName": "Orientation",
+          "type": {
+            "enumeration": [
+              {
+                "displayName": "Auto",
+                "value": "auto"
+              },
+              {
+                "displayName": "Portrait",
+                "value": "portrait"
+              },
+              {
+                "displayName": "Landscape",
+                "value": "landscape"
+              }
+            ]
+          }
+        },
+        "paperSize": {
+          "displayName": "Paper size",
+          "type": {
+            "enumeration": [
+              {
+                "displayName": "A4",
+                "value": "a4"
+              },
+              {
+                "displayName": "Letter",
+                "value": "letter"
+              }
+            ]
+          }
+        },
+        "pdfFontSize": {
+          "displayName": "PDF font size",
+          "type": {
+            "numeric": true
+          }
+        },
+        "headerText": {
+          "displayName": "Header text",
+          "type": {
+            "text": true
+          }
+        }
+      }
+    }
+  },
+  "privileges": [
+    {
+      "name": "ExportContent",
+      "essential": false
+    }
+  ]
+}

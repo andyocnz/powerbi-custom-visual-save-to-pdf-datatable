@@ -1,0 +1,129 @@
+.visual-root {
+    font-family: "Segoe UI", Tahoma, sans-serif;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    width: 100%;
+    color: #1f2933;
+}
+
+.toolbar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 8px;
+    border-bottom: 1px solid #d9e2ec;
+    background: linear-gradient(90deg, #f8fafc 0%, #eef2f6 100%);
+}
+
+.toolbar button {
+    border: 1px solid #bcccdc;
+    background: #ffffff;
+    color: #102a43;
+    border-radius: 4px;
+    padding: 6px 10px;
+    cursor: pointer;
+}
+
+.debug-pill {
+    display: inline-block;
+    border: 1px solid #829ab1;
+    background: #d9e2ec;
+    color: #102a43;
+    border-radius: 10px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.page-size-select {
+    border: 1px solid #bcccdc;
+    background: #ffffff;
+    color: #102a43;
+    border-radius: 4px;
+    padding: 5px 8px;
+    font-size: 12px;
+}
+
+.page-size-select:disabled {
+    opacity: 0.55;
+}
+
+.toolbar button:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.page-indicator {
+    margin-left: auto;
+    color: #486581;
+    font-size: 12px;
+}
+
+.table-wrap {
+    overflow: auto;
+    flex: 1;
+}
+
+.status-bar {
+    padding: 6px 8px;
+    font-size: 12px;
+    color: #334e68;
+    border-bottom: 1px solid #d9e2ec;
+    background: #f8fafc;
+}
+
+.status-bar.error {
+    color: #8a1c1c;
+    background: #feeeee;
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: auto;
+}
+
+.data-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #f0f4f8;
+}
+
+.data-table th,
+.data-table td {
+    border: 1px solid #d9e2ec;
+    text-align: left;
+    vertical-align: top;
+    padding: 6px 8px;
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.data-table tbody tr:nth-child(even) {
+    background: #f8fafc;
+}
+
+@media print {
+    .toolbar {
+        display: none !important;
+    }
+
+    .table-wrap {
+        overflow: visible !important;
+    }
+
+    .data-table {
+        page-break-inside: auto;
+    }
+
+    .data-table tr {
+        page-break-inside: avoid;
+        page-break-after: auto;
+    }
+
+    .data-table thead {
+        display: table-header-group;
+    }
+}

@@ -45,25 +45,16 @@ class PagingCardSettings extends FormattingSettingsCard {
 }
 
 class ExportSettingsCardSettings extends FormattingSettingsCard {
-    orientation = new formattingSettings.ItemDropdown({
+    orientation = new formattingSettings.AutoDropdown({
         name: "orientation",
         displayName: "Orientation",
-        value: { value: "auto", displayName: "Auto" },
-        items: [
-            { value: "auto", displayName: "Auto" },
-            { value: "portrait", displayName: "Portrait" },
-            { value: "landscape", displayName: "Landscape" }
-        ]
+        value: "auto"
     });
 
-    paperSize = new formattingSettings.ItemDropdown({
+    paperSize = new formattingSettings.AutoDropdown({
         name: "paperSize",
         displayName: "Paper size",
-        value: { value: "a4", displayName: "A4" },
-        items: [
-            { value: "a4", displayName: "A4" },
-            { value: "letter", displayName: "Letter" }
-        ]
+        value: "a4"
     });
 
     pdfFontSize = new formattingSettings.NumUpDown({
@@ -74,14 +65,26 @@ class ExportSettingsCardSettings extends FormattingSettingsCard {
 
     headerText = new formattingSettings.TextInput({
         name: "headerText",
-        displayName: "Header text",
-        value: "DataTable Export",
-        placeholder: "Header text"
+        displayName: "PDF title",
+        value: "",
+        placeholder: "e.g. Stark Billing Report"
     });
 
     name: string = "exportSettings";
     displayName: string = "Export";
     slices: Array<FormattingSettingsSlice> = [this.orientation, this.paperSize, this.pdfFontSize, this.headerText];
+}
+
+class TotalsCardSettings extends FormattingSettingsCard {
+    showTotals = new formattingSettings.ToggleSwitch({
+        name: "showTotals",
+        displayName: "Show total row",
+        value: false
+    });
+
+    name: string = "totals";
+    displayName: string = "Totals";
+    slices: Array<FormattingSettingsSlice> = [this.showTotals];
 }
 
 /**
@@ -91,5 +94,6 @@ class ExportSettingsCardSettings extends FormattingSettingsCard {
 export class VisualFormattingSettingsModel extends FormattingSettingsModel {
     pagingCard = new PagingCardSettings();
     exportCard = new ExportSettingsCardSettings();
-    cards = [this.pagingCard, this.exportCard];
+    totalsCard = new TotalsCardSettings();
+    cards = [this.pagingCard, this.exportCard, this.totalsCard];
 }

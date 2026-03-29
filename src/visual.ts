@@ -2,6 +2,7 @@
 
 import powerbi from "powerbi-visuals-api";
 import { FormattingSettingsService } from "powerbi-visuals-utils-formattingmodel";
+import { valueFormatter } from "powerbi-visuals-utils-formattingutils";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import "./../style/visual.less";
@@ -9,14 +10,20 @@ import { VisualFormattingSettingsModel } from "./settings";
 
 import DataView = powerbi.DataView;
 import DataViewTable = powerbi.DataViewTable;
+import DataViewObjectPropertyIdentifier = powerbi.DataViewObjectPropertyIdentifier;
 import PrivilegeStatus = powerbi.PrivilegeStatus;
 import IVisual = powerbi.extensibility.visual.IVisual;
 import VisualConstructorOptions = powerbi.extensibility.visual.VisualConstructorOptions;
 import VisualUpdateOptions = powerbi.extensibility.visual.VisualUpdateOptions;
 
+const FORMAT_STRING_PROP: DataViewObjectPropertyIdentifier = {
+    objectName: "general",
+    propertyName: "formatString"
+};
+
 type PdfOrientation = "portrait" | "landscape";
 type PdfOrientationPreference = "auto" | PdfOrientation;
-type PdfPaperSize = "a4" | "letter";
+type PdfPaperSize = "a4" | "letter" | "a3";
 
 export class Visual implements IVisual {
     private root: HTMLElement;
@@ -32,6 +39,9 @@ export class Visual implements IVisual {
     private statusBar: HTMLDivElement;
     private columns: string[] = [];
     private rows: string[][] = [];
+    private rawRows: powerbi.PrimitiveValue[][] = [];
+    private colMeta: Array<{ isNumeric: boolean; isDateTime: boolean; showTotal: boolean; formatString: string }> = [];
+    private colFormatters: Array<{ format(value: unknown): string }> = [];
     private pageSize: number = 25;
     private currentPage: number = 1;
     private showAll: boolean = false;
@@ -131,6 +141,9 @@ export class Visual implements IVisual {
         if (!table || !table.columns || !table.rows) {
             this.columns = [];
             this.rows = [];
+            this.rawRows = [];
+            this.colMeta = [];
+            this.colFormatters = [];
             this.currentPage = 1;
             this.renderNoData();
             return;
@@ -138,7 +151,38 @@ export class Visual implements IVisual {
 
         this.pageSize = this.readPageSize();
         this.columns = table.columns.map((c) => c.displayName || c.queryName || "Column");
-        this.rows = table.rows.map((row) => row.map((cell) => this.valueToText(cell)));
+
+        this.colMeta = table.columns.map((c) => ({
+            isNumeric: !!(c.type?.numeric || c.type?.integer),
+            isDateTime: !!(c.type?.dateTime),
+            showTotal: !!(c.objects?.["columnTotals"]?.["showTotal"]),
+            formatString:
+                valueFormatter.getFormatString(c, FORMAT_STRING_PROP) ||
+                c.format ||
+                "",
+        }));
+
+        this.colFormatters = this.colMeta.map((m) =>
+            valueFormatter.create({ format: m.formatString })
+        );
+
+        this.rawRows = table.rows.map((row) => [...row]);
+
+        this.rows = this.rawRows.map((row) =>
+            row.map((cell, colIdx) => {
+                if (cell === null || cell === undefined) return "";
+                try {
+                    let value: powerbi.PrimitiveValue = cell;
+                    if (this.colMeta[colIdx].isDateTime && !(value instanceof Date)) {
+                        const coerced = new Date(value as string | number);
+                        if (!isNaN(coerced.getTime())) value = coerced;
+                    }
+                    return this.colFormatters[colIdx].format(value);
+                } catch {
+                    return this.valueToText(cell);
+                }
+            })
+        );
 
         if (this.currentPage > this.totalPages()) {
             this.currentPage = Math.max(this.totalPages(), 1);
@@ -148,7 +192,41 @@ export class Visual implements IVisual {
     }
 
     public getFormattingModel(): powerbi.visuals.FormattingModel {
-        return this.formattingSettingsService.buildFormattingModel(this.formattingSettings);
+        const model = this.formattingSettingsService.buildFormattingModel(this.formattingSettings);
+
+        const columns = this.dataView?.table?.columns;
+        const showTotals = !!(this.formattingSettings?.totalsCard?.showTotals?.value);
+        if (showTotals && columns?.length) {
+            const slices: powerbi.visuals.FormattingSlice[] = columns.map((col, idx) => ({
+                uid: `columnTotals-slice-${col.queryName || idx}`,
+                displayName: col.displayName || `Column ${idx + 1}`,
+                control: {
+                    type: "ToggleSwitch" as powerbi.visuals.FormattingComponent.ToggleSwitch,
+                    properties: {
+                        descriptor: {
+                            objectName: "columnTotals",
+                            propertyName: "showTotal",
+                            selector: col.queryName ? { metadata: col.queryName } : null
+                        },
+                        value: !!(col.objects?.["columnTotals"]?.["showTotal"])
+                    }
+                }
+            }));
+
+            const columnTotalsCard: powerbi.visuals.FormattingCard = {
+                uid: "columnTotals-card",
+                displayName: "Column totals",
+                groups: [{
+                    uid: "columnTotals-group",
+                    displayName: "",
+                    slices
+                }]
+            };
+
+            model.cards = [...model.cards, columnTotalsCard];
+        }
+
+        return model;
     }
 
     private renderNoData(): void {
@@ -191,6 +269,19 @@ export class Visual implements IVisual {
         this.clearElement(this.tableEl);
         this.tableEl.appendChild(thead);
         this.tableEl.appendChild(tbody);
+
+        if (this.formattingSettings?.totalsCard?.showTotals?.value) {
+            const totalRow = this.computeTotalRow();
+            const tfoot = document.createElement("tfoot");
+            const tr = document.createElement("tr");
+            totalRow.forEach((cell) => {
+                const td = document.createElement("td");
+                td.textContent = cell;
+                tr.appendChild(td);
+            });
+            tfoot.appendChild(tr);
+            this.tableEl.appendChild(tfoot);
+        }
 
         const totalPages = this.totalPages();
         const rowCount = this.rows.length;
@@ -254,20 +345,54 @@ export class Visual implements IVisual {
         const fontSize = this.readPdfFontSize();
         const headerText = this.readHeaderText();
 
+        const now = new Date();
+        const dateLabel = `Schedule as at ${now.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}`;
+
         const doc = new jsPDF({
             orientation,
             unit: "pt",
             format: paperSize
         });
 
+        const showTotals = !!(this.formattingSettings?.totalsCard?.showTotals?.value);
+        const pdfFoot = showTotals ? [this.computeTotalRow()] : undefined;
+
+        // Compute per-column widths from data content only (ignore header length).
+        // Headers will wrap within the constrained width.
+        const charPt = fontSize * 0.52;
+        const colPadding = 10;
+        const minColWidth = 28;
+        const maxColWidth = 200;
+        const availableWidth = doc.internal.pageSize.getWidth() - 40; // 20pt left + 20pt right margin
+
+        // Step 1: compute preferred width per column (data-driven, header wraps to ~3 lines max)
+        const preferredWidths = this.columns.map((header, colIdx) => {
+            const maxDataLen = this.rows.reduce((max, row) => Math.max(max, String(row[colIdx] ?? "").length), 4);
+            const dataWidth = maxDataLen * charPt + colPadding;
+            const headerFloor = Math.ceil(header.length / 3) * charPt + colPadding;
+            return Math.min(maxColWidth, Math.max(minColWidth, dataWidth, headerFloor));
+        });
+
+        // Step 2: if total exceeds page width, scale all columns proportionally to fit
+        const totalPreferred = preferredWidths.reduce((sum, w) => sum + w, 0);
+        const scale = totalPreferred > availableWidth ? availableWidth / totalPreferred : 1;
+
+        const columnStyles: Record<number, { cellWidth: number }> = {};
+        preferredWidths.forEach((w, colIdx) => {
+            columnStyles[colIdx] = { cellWidth: Math.floor(w * scale) };
+        });
+
         autoTable(doc, {
             head: [this.columns],
             body: this.rows,
-            startY: 52,
-            margin: { left: 20, right: 20, top: 52, bottom: 24 },
+            foot: pdfFoot,
+            startY: 66,
+            margin: { left: 20, right: 20, top: 66, bottom: 24 },
             theme: "grid",
-            tableWidth: "auto",
+            tableWidth: "wrap",
             showHead: "everyPage",
+            showFoot: showTotals ? "lastPage" : "never",
+            columnStyles,
             styles: {
                 fontSize,
                 cellPadding: 4,
@@ -276,6 +401,11 @@ export class Visual implements IVisual {
                 lineWidth: 0.5
             },
             headStyles: {
+                fillColor: [240, 244, 248],
+                textColor: [16, 42, 67],
+                fontStyle: "bold"
+            },
+            footStyles: {
                 fillColor: [240, 244, 248],
                 textColor: [16, 42, 67],
                 fontStyle: "bold"
@@ -294,6 +424,9 @@ export class Visual implements IVisual {
             doc.setFont("helvetica", "bold");
             doc.setFontSize(10);
             doc.text(headerText, 20, 18);
+            doc.setFont("helvetica", "normal");
+            doc.setFontSize(8);
+            doc.text(dateLabel, 20, 32);
 
             const pageLabel = `Page ${page} of ${pageCount}`;
             doc.text(pageLabel, pageWidth - 80, pageHeight - 10);
@@ -310,6 +443,25 @@ export class Visual implements IVisual {
             ? this.columns.reduce((acc, c) => acc + c.length, 0) / this.columns.length
             : 0;
         return columnCount > 6 || avgColumnHeaderLen > 18 ? "landscape" : "portrait";
+    }
+
+    private computeTotalRow(): string[] {
+        // Find first column that won't show a sum — use it for the "Total" label
+        const labelIdx = this.colMeta.findIndex((m) => !m.showTotal || !m.isNumeric);
+        return this.colMeta.map((meta, colIdx) => {
+            if (colIdx === labelIdx) return "Total";
+            if (!meta.showTotal || !meta.isNumeric) return "";
+            let sum = 0;
+            for (const row of this.rawRows) {
+                const v = row[colIdx];
+                if (typeof v === "number" && isFinite(v)) sum += v;
+            }
+            try {
+                return this.colFormatters[colIdx].format(sum);
+            } catch {
+                return String(sum);
+            }
+        });
     }
 
     private getCurrentPageRows(): string[][] {
@@ -344,20 +496,15 @@ export class Visual implements IVisual {
     }
 
     private readOrientationPreference(): PdfOrientationPreference {
-        const value = this.formattingSettings?.exportCard?.orientation?.value;
-        const raw = value && typeof value === "object" ? String(value.value) : "";
-        if (raw === "portrait" || raw === "landscape" || raw === "auto") {
-            return raw;
-        }
+        const raw = String(this.formattingSettings?.exportCard?.orientation?.value ?? "");
+        if (raw === "portrait" || raw === "landscape" || raw === "auto") return raw;
         return "auto";
     }
 
     private readPaperSize(): PdfPaperSize {
-        const value = this.formattingSettings?.exportCard?.paperSize?.value;
-        const raw = value && typeof value === "object" ? String(value.value) : "";
-        if (raw === "letter") {
-            return "letter";
-        }
+        const raw = String(this.formattingSettings?.exportCard?.paperSize?.value ?? "");
+        if (raw === "letter") return "letter";
+        if (raw === "a3") return "a3";
         return "a4";
     }
 
@@ -372,7 +519,7 @@ export class Visual implements IVisual {
     private readHeaderText(): string {
         const raw = this.formattingSettings?.exportCard?.headerText?.value || "";
         const value = String(raw).trim();
-        return value || "DataTable Export";
+        return value || "Data Export";
     }
 
     private buildExportFileName(): string {

@@ -30,6 +30,37 @@
     "default": {}
   },
   "objects": {
+    "general": {
+      "displayName": "General",
+      "properties": {
+        "formatString": {
+          "displayName": "Format String",
+          "type": {
+            "formatting": {
+              "formatString": true
+            }
+          }
+        }
+      }
+    },
+    "totals": {
+      "displayName": "Totals",
+      "properties": {
+        "showTotals": {
+          "displayName": "Show total row",
+          "type": { "bool": true }
+        }
+      }
+    },
+    "columnTotals": {
+      "displayName": "Column totals",
+      "properties": {
+        "showTotal": {
+          "displayName": "Include in total",
+          "type": { "bool": true }
+        }
+      }
+    },
     "paging": {
       "displayName": "Paging",
       "properties": {
@@ -70,6 +101,10 @@
               {
                 "displayName": "A4",
                 "value": "a4"
+              },
+              {
+                "displayName": "A3",
+                "value": "a3"
               },
               {
                 "displayName": "Letter",

@@ -120,10 +120,12 @@
           }
         },
         "headerText": {
-          "displayName": "Header text",
-          "type": {
-            "text": true
-          }
+          "displayName": "PDF title",
+          "type": { "text": true }
+        },
+        "subtitleText": {
+          "displayName": "PDF subtitle",
+          "type": { "text": true }
         }
       }
     }

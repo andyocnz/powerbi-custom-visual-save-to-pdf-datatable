@@ -67,12 +67,19 @@ class ExportSettingsCardSettings extends FormattingSettingsCard {
         name: "headerText",
         displayName: "PDF title",
         value: "",
-        placeholder: "e.g. Stark Billing Report"
+        placeholder: "Or drop a measure into PDF Title field"
+    });
+
+    subtitleText = new formattingSettings.TextInput({
+        name: "subtitleText",
+        displayName: "PDF subtitle",
+        value: "",
+        placeholder: "Or drop a measure into PDF Subtitle field"
     });
 
     name: string = "exportSettings";
     displayName: string = "Export";
-    slices: Array<FormattingSettingsSlice> = [this.orientation, this.paperSize, this.pdfFontSize, this.headerText];
+    slices: Array<FormattingSettingsSlice> = [this.orientation, this.paperSize, this.pdfFontSize, this.headerText, this.subtitleText];
 }
 
 class TotalsCardSettings extends FormattingSettingsCard {

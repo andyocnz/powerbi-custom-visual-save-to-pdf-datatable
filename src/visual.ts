@@ -194,6 +194,21 @@ export class Visual implements IVisual {
     public getFormattingModel(): powerbi.visuals.FormattingModel {
         const model = this.formattingSettingsService.buildFormattingModel(this.formattingSettings);
 
+        // Enable fx button (dynamic measure binding) on title and subtitle slices
+        for (const card of model.cards) {
+            for (const group of (card as powerbi.visuals.FormattingCard).groups ?? []) {
+                for (const slice of (group as powerbi.visuals.FormattingGroup).slices ?? []) {
+                    const uid = (slice as powerbi.visuals.SimpleVisualFormattingSlice).uid ?? "";
+                    if (uid === "exportSettings-headerText" || uid === "exportSettings-subtitleText") {
+                        // instanceKind 2 = ConstantOrRule — shows the fx button in the Format pane
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        const descriptor = ((slice as any).control?.properties?.descriptor);
+                        if (descriptor) descriptor.instanceKind = 2;
+                    }
+                }
+            }
+        }
+
         const columns = this.dataView?.table?.columns;
         const showTotals = !!(this.formattingSettings?.totalsCard?.showTotals?.value);
         if (showTotals && columns?.length) {
@@ -343,7 +358,14 @@ export class Visual implements IVisual {
         const orientation = orientationPref === "auto" ? this.pickAutoOrientation() : orientationPref;
         const paperSize = this.readPaperSize();
         const fontSize = this.readPdfFontSize();
-        const headerText = this.readHeaderText();
+        const titleSettings = this.readGeneralTitle();
+        const subtitleSettings = this.readGeneralSubtitle();
+        const headerText = titleSettings.text;
+
+        const titleY = Math.max(18, titleSettings.fontSize + 4);
+        const subtitleY = titleY + subtitleSettings.fontSize + 4;
+        const dateY = (subtitleSettings.show ? subtitleY : titleY) + 12;
+        const tableStartY = Math.max(50, dateY + 14);
 
         const now = new Date();
         const dateLabel = `Schedule as at ${now.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}`;
@@ -386,8 +408,8 @@ export class Visual implements IVisual {
             head: [this.columns],
             body: this.rows,
             foot: pdfFoot,
-            startY: 66,
-            margin: { left: 20, right: 20, top: 66, bottom: 24 },
+            startY: tableStartY,
+            margin: { left: 20, right: 20, top: tableStartY, bottom: 24 },
             theme: "grid",
             tableWidth: "wrap",
             showHead: "everyPage",
@@ -421,12 +443,20 @@ export class Visual implements IVisual {
         const pageHeight = pageSize.getHeight();
         for (let page = 1; page <= pageCount; page += 1) {
             doc.setPage(page);
-            doc.setFont("helvetica", "bold");
-            doc.setFontSize(10);
-            doc.text(headerText, 20, 18);
+            doc.setFont("helvetica", titleSettings.bold ? "bold" : "normal");
+            doc.setFontSize(titleSettings.fontSize);
+            doc.setTextColor(...titleSettings.color);
+            doc.text(headerText, 20, titleY);
+            if (subtitleSettings.show) {
+                doc.setFont("helvetica", subtitleSettings.bold ? "bold" : "normal");
+                doc.setFontSize(subtitleSettings.fontSize);
+                doc.setTextColor(...subtitleSettings.color);
+                doc.text(subtitleSettings.text, 20, subtitleY);
+            }
             doc.setFont("helvetica", "normal");
             doc.setFontSize(8);
-            doc.text(dateLabel, 20, 32);
+            doc.setTextColor(0, 0, 0);
+            doc.text(dateLabel, 20, dateY);
 
             const pageLabel = `Page ${page} of ${pageCount}`;
             doc.text(pageLabel, pageWidth - 80, pageHeight - 10);
@@ -516,10 +546,40 @@ export class Visual implements IVisual {
         return Math.max(7, Math.min(14, Math.floor(candidate)));
     }
 
+    private readGeneralTitle(): { text: string; bold: boolean; fontSize: number; color: [number, number, number] } {
+        const titleObj = this.dataView?.metadata?.objects?.["title"];
+        const text = String(this.formattingSettings?.exportCard?.headerText?.value ?? "").trim()
+            || String(titleObj?.["text"] ?? "").trim()
+            || "Data Export";
+        const bold = titleObj?.["bold"] !== false;
+        const rawSize = Number(titleObj?.["fontSize"]);
+        const fontSize = Number.isFinite(rawSize) && rawSize > 0 ? Math.min(rawSize, 24) : 10;
+        const rawColor = String(titleObj?.["fontColor"]?.["solid"]?.["color"] ?? "").trim();
+        const color = this.hexToRgb(rawColor) ?? [16, 42, 67];
+        return { text, bold, fontSize, color };
+    }
+
+    private readGeneralSubtitle(): { text: string; show: boolean; bold: boolean; fontSize: number; color: [number, number, number] } {
+        const subObj = this.dataView?.metadata?.objects?.["subTitle"];
+        const text = String(this.formattingSettings?.exportCard?.subtitleText?.value ?? "").trim()
+            || String(subObj?.["text"] ?? "").trim();
+        const show = text.length > 0;
+        const bold = !!(subObj?.["bold"]);
+        const rawSize = Number(subObj?.["fontSize"]);
+        const fontSize = Number.isFinite(rawSize) && rawSize > 0 ? Math.min(rawSize, 20) : 9;
+        const rawColor = String(subObj?.["fontColor"]?.["solid"]?.["color"] ?? "").trim();
+        const color = this.hexToRgb(rawColor) ?? [80, 80, 80];
+        return { text, show: show && text.length > 0, bold, fontSize, color };
+    }
+
+    private hexToRgb(hex: string): [number, number, number] | null {
+        const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
+        if (!m) return null;
+        return [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)];
+    }
+
     private readHeaderText(): string {
-        const raw = this.formattingSettings?.exportCard?.headerText?.value || "";
-        const value = String(raw).trim();
-        return value || "Data Export";
+        return this.readGeneralTitle().text;
     }
 
     private buildExportFileName(): string {
